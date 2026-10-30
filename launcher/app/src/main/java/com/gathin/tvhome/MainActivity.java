@@ -10,6 +10,7 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
@@ -19,6 +20,7 @@ import android.net.Uri;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -26,6 +28,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.view.KeyEvent;
@@ -155,16 +160,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private float density;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable networkRefresh = () -> {
+        if (!isDestroyed()) updateWifiLabel();
+    };
     /** Refreshes the network pill when the connection changes: at boot Wi-Fi often connects after Home is shown. */
     private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
         @Override
         public void onAvailable(@NonNull Network network) {
-            handler.post(MainActivity.this::updateWifiLabel);
+            handler.post(networkRefresh);
         }
 
         @Override
         public void onLost(@NonNull Network network) {
-            handler.post(MainActivity.this::updateWifiLabel);
+            handler.post(networkRefresh);
+        }
+
+        @Override
+        public void onCapabilitiesChanged(@NonNull Network network,
+                                          @NonNull NetworkCapabilities capabilities) {
+            handler.post(networkRefresh);
         }
     };
     private final Runnable minuteTick = new Runnable() {
@@ -408,10 +422,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
 
         ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        // The default-network callback is Android 7 (24). Older releases still get the label
-        // refreshed by the broadcasts below; only the live "ethernet/wifi" switch is missing.
-        if (cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            cm.registerDefaultNetworkCallback(networkCallback);
+        if (cm != null) {
+            // A default request excludes VPNs, including split-tunnel VPNs that leave our default unchanged.
+            cm.registerNetworkCallback(new NetworkRequest.Builder()
+                    .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                    .build(), networkCallback);
         }
 
         // If the user left the Bing wallpaper on, make sure today's picture is there before they see
@@ -538,6 +553,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onDestroy();
         ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         if (cm != null) cm.unregisterNetworkCallback(networkCallback);
+        handler.removeCallbacks(networkRefresh);
     }
 
     @Override
@@ -2400,17 +2416,22 @@ private int recommendColumns() {
     /** Shows the Wi-Fi network name on the button when we can read it, otherwise the connection type. */
     private void updateWifiLabel() {
         String text = getString(R.string.wifi);
+        NetworkStatus status = new NetworkStatus();
         try {
             ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-            // getActiveNetwork is Android 6 (23); older releases fall back to the plain label.
-            Network net = cm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                    ? cm.getActiveNetwork() : null;
-            NetworkCapabilities caps = net != null ? cm.getNetworkCapabilities(net) : null;
-            if (caps == null) {
+            for (Network network : cm != null ? cm.getAllNetworks() : new Network[0]) {
+                NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+                if (caps == null) continue;
+                status.addNetwork(caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET),
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET));
+            }
+            if (status.connection == NetworkStatus.OFFLINE) {
                 text = getString(R.string.offline);
-            } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+            } else if (status.connection == NetworkStatus.ETHERNET) {
                 text = getString(R.string.ethernet);
-            } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            } else if (status.connection == NetworkStatus.WIFI) {
                 WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
                 WifiInfo info = wm != null ? wm.getConnectionInfo() : null;
                 String ssid = info != null ? info.getSSID() : null;
@@ -2421,7 +2442,30 @@ private int recommendColumns() {
             }
         } catch (Exception ignored) {
         }
-        btnWifi.setText(text);
+        int icon = status.connection == NetworkStatus.ETHERNET
+                ? R.drawable.ic_ethernet : R.drawable.ic_wifi;
+        btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0);
+        CharSequence label = text;
+        if (status.hasVpn()) {
+            String badge = getString(R.string.vpn);
+            VpnBadge span = new VpnBadge(getDrawable(R.drawable.ic_lock), density);
+            Drawable startIcon = btnWifi.getCompoundDrawablesRelative()[0];
+            int iconRoom = startIcon != null
+                    ? startIcon.getIntrinsicWidth() + btnWifi.getCompoundDrawablePadding() : 0;
+            float room = btnWifi.getMaxWidth() - btnWifi.getPaddingStart() - btnWifi.getPaddingEnd()
+                    - iconRoom - span.getSize(btnWifi.getPaint(), badge, 0, badge.length(), null)
+                    - btnWifi.getPaint().measureText(" ") - 2 * density;
+            String name = TextUtils.ellipsize(text, btnWifi.getPaint(), Math.max(0, room),
+                    TextUtils.TruncateAt.END).toString();
+            if (status.connection == NetworkStatus.ETHERNET
+                    || (name.length() < text.length() && name.length() < 5)) name = "";
+            // Keep a plain space even without a name, so the line retains its normal font metrics.
+            SpannableString marked = new SpannableString(name + " " + badge);
+            marked.setSpan(span, name.length() + 1, marked.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            label = marked;
+        }
+        btnWifi.setContentDescription(status.hasVpn() ? text + " " + getString(R.string.vpn) : text);
+        if (!TextUtils.equals(btnWifi.getText(), label)) btnWifi.setText(label);
     }
 
     private void open(Intent i) {

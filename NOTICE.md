@@ -30,7 +30,11 @@ Added here, not present upstream:
   one.
 
 Still missing here (available upstream): the theme-folder workflow, module cards, the ~250 KB shrunk
-build, AOT precompilation, the home-switch shortcut tile, the VPN badge and the Jalali calendar.
+build, AOT precompilation, the home-switch shortcut tile and the Jalali calendar.
+
+The network-pill VPN badge and lock icon have been ported from CleanYourTV under the same MIT
+license. VPN status updates automatically without a configured client package or additional
+permissions.
 
 Also in this fork:
 

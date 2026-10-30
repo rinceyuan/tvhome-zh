@@ -95,7 +95,12 @@ Listed honestly so you can decide:
 
 - theme-folder workflow (`themes/`), module cards other apps can plug into
 - the ~250 KB shrunk build and first-launch AOT precompilation
-- a "switch home app" shortcut tile, VPN app badge, Jalali calendar display
+- a "switch home app" shortcut tile, Jalali calendar display
+
+**VPN status is now included**: the network pill shows a green lock-and-VPN badge while a system
+VPN / TUN connection is up, and hides it on disconnect. The underlying Wi-Fi / Ethernet link is kept,
+long network names leave room for the badge, and no VPN package name or new permission is needed.
+Running a proxy app without a system VPN / TUN connection does not show the badge.
 
 The rest — the tvOS look, the glass highlight, the clock screensaver, the `config.json` overlay, the
 debloat and restore scripts — comes from upstream under its MIT licence.
