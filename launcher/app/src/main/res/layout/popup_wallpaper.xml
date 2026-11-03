@@ -2,7 +2,7 @@
 <!--
   The Desktop settings panel.
 
-  Same construction as the Inputs menu upstream: a glass sheet with 6dp of padding and rows that
+  Same construction as the Inputs menu upstream: a dark sheet with 6dp of padding and rows that
   carry their own focus pill, so no title bar, no border per row and no close button are needed.
   Rows with a second line of status text are 52dp, plain rows 42dp, which is the rhythm the rest
   of the launcher's menus use.
@@ -15,7 +15,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/glass_panel"
+    android:background="@drawable/dropdown_panel"
     android:padding="6dp"
     android:elevation="12dp">
 

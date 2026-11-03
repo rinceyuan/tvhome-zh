@@ -63,8 +63,10 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -947,12 +949,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             });
         }
         addTileMenuRow(rows, popup, R.string.tile_hide, () -> {
-            new HiddenApps(this).hide(entry.pkg);
-            // A hidden app left pinned in the dock would leave a hole in the row, so it comes out
-            // of the dock as well. Restoring it later puts it back in the grid, not the dock.
-            DockStore dockStore = adapter.dock();
-            if (dockStore.isPinned(entry.pkg)) dockStore.unpin(entry.pkg);
-            adapter.reload();
+            hideApp(entry.pkg);
             toast(getString(R.string.app_hidden, entry.label));
         });
         addTileMenuRow(rows, popup, R.string.tile_app_info, () -> open(new Intent(
@@ -1219,13 +1216,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         list.setLayoutManager(new LinearLayoutManager(this));
 
         final List<DockApp> found = new ArrayList<>();
+        final Set<String> seenPackages = new HashSet<>();
         PackageManager pm = getPackageManager();
         Intent probe = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
         for (ResolveInfo ri : pm.queryIntentActivities(probe, 0)) {
             if (ri.activityInfo == null) continue;
-            if (ri.activityInfo.packageName.equals(getPackageName())) continue;
-            found.add(new DockApp(ri.activityInfo.packageName,
+            String pkg = ri.activityInfo.packageName;
+            if (pkg.equals(getPackageName()) || seenPackages.contains(pkg)) continue;
+            found.add(new DockApp(pkg,
                     String.valueOf(ri.loadLabel(pm)), ri.loadIcon(pm)));
+            seenPackages.add(pkg);
         }
         // The apps the user put on the desk by hand belong here too: they are on the desk, so they
         // can be pinned to the dock like any other.
@@ -1235,10 +1235,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             try {
                 android.content.pm.ActivityInfo ai = pm.getActivityInfo(cn, 0);
                 String pkg = cn.getPackageName();
-                boolean already = false;
-                for (DockApp a : found) if (a.pkg.equals(pkg)) { already = true; break; }
-                if (already) continue;
+                if (seenPackages.contains(pkg)) continue;
                 found.add(new DockApp(pkg, String.valueOf(ai.loadLabel(pm)), ai.loadIcon(pm)));
+                seenPackages.add(pkg);
             } catch (Exception e) {
                 // Uninstalled since it was added.
             }
@@ -1264,7 +1263,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 boolean pinned = dock.isPinned(pkg);
                 h.tick.setVisibility(pinned ? View.VISIBLE : View.INVISIBLE);
                 h.item.setOnClickListener(v -> {
-                    if (pinned) {
+                    List<String> pinnedApps = dock.apps();
+                    int savedCount = pinnedApps.size();
+                    for (int i = savedCount - 1; i >= 0; i--) {
+                        if (isConfirmedUninstalled(pm, pinnedApps.get(i))) pinnedApps.remove(i);
+                    }
+                    if (pinnedApps.size() != savedCount) dock.set(pinnedApps);
+                    if (dock.isPinned(pkg)) {
                         dock.unpin(pkg);
                         h.tick.setVisibility(View.INVISIBLE);
                         toast(getString(R.string.dock_removed, label));
@@ -1274,6 +1279,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                         toast(getString(R.string.dock_full, adapter.dockSize()));
                         return;
                     } else {
+                        new HiddenApps(MainActivity.this).show(pkg);
                         dock.pin(pkg, dock.apps().size());
                         h.tick.setVisibility(View.VISIBLE);
                         toast(getString(R.string.dock_added, label));
@@ -1289,10 +1295,30 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
 
         View anchor = findViewById(R.id.btnDock);
-        // Sized from its content and hung under the button with the left edges aligned: the same
-        // glass dropdown as the Inputs menu, not a settings sheet floating mid-screen.
-        dockPicker = glassPanel(panel, anchor, 260);
+        // Sized from its content and hung under the button with the left edges aligned.
+        dockPicker = dropdownPanel(panel, anchor, 260);
         dropIn(dockPicker, panel, anchor, Gravity.START);
+    }
+
+    private static boolean isConfirmedUninstalled(PackageManager pm, String pkg) {
+        try {
+            int flags = Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+                    ? PackageManager.GET_UNINSTALLED_PACKAGES : 0;
+            ApplicationInfo info = pm.getApplicationInfo(pkg, flags);
+            return (info.flags & ApplicationInfo.FLAG_INSTALLED) == 0;
+        } catch (PackageManager.NameNotFoundException e) {
+            // Android 11+ package visibility can also hide an installed package.
+            return Build.VERSION.SDK_INT < Build.VERSION_CODES.R;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    void hideApp(String pkg) {
+        new HiddenApps(this).hide(pkg);
+        DockStore dockStore = adapter.dock();
+        if (dockStore.isPinned(pkg)) dockStore.unpin(pkg);
+        adapter.reload();
     }
 
     /** The packages that have a tile on the desk right now, for the app library to tick. */
@@ -1514,7 +1540,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Hung under the button with the left edges aligned, exactly like the Inputs menu. No row
         // scaling: a scaled row is what used to need clipping turned off, and the focus pill alone
         // is enough to see where you are.
-        wallpaperPanel = glassPanel(panel, anchor, 300);
+        wallpaperPanel = dropdownPanel(panel, anchor, 300);
         dropIn(wallpaperPanel, panel, anchor, Gravity.START);
         // The rows live in a ScrollView now, and a ScrollView takes the focus for itself: the rows
         // have to be asked for it, or the remote walks over an empty panel.
@@ -2652,17 +2678,20 @@ private int recommendColumns() {
         // Fit the widest row: TVs that report a status on every port (Sony) would otherwise squeeze the names out.
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max(width, panel.getMeasuredWidth()));
+        popup.setElevation(12 * density);
+        Glass.capture(root);
+        applyGlass(panel);
 
         dropIn(popup, panel, anchor, Gravity.START);
         rows.getChildAt(0).requestFocus();
     }
 
     /**
-     * A glass dropdown built the way the Inputs menu is: as wide as its widest row but never most of
+     * A dropdown built the way the Inputs menu is: as wide as its widest row but never most of
      * the screen, and no taller than the room under the button, so a long list scrolls inside the
      * panel instead of running off the bottom of the TV.
      */
-    PopupWindow glassPanel(View panel, View anchor, int minWidthDp) {
+    PopupWindow dropdownPanel(View panel, View anchor, int minWidthDp) {
         Glass.capture(root);
         applyGlass(panel);
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);

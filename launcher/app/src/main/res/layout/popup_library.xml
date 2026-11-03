@@ -2,15 +2,15 @@
 <!--
   The app library: every app the TV can start, with a tick for the ones on the desk.
 
-  Same glass sheet as the Favourites and Desktop settings panels, with a title line on top and a
-  scrollable list under it. The list is given a fixed height by the code: a TV with two hundred
+  A dark sheet with a title line on top and a scrollable list under it.
+  The list is given a fixed height by the code: a TV with two hundred
   apps would otherwise measure the whole list and put the panel off the screen.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/glass_panel"
+    android:background="@drawable/dropdown_panel"
     android:padding="6dp"
     android:elevation="12dp">
 

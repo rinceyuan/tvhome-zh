@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The Favourites panel: a glass dropdown that hangs under the 常用 button, built like the Inputs menu
+  The Favourites panel: a dark dropdown that hangs under the 常用 button, built like the Inputs menu
   upstream — no title bar, no close button (Back dismisses it), 6dp of padding and rows that carry
   their own focus pill. Width and height are set from the content when the popup is built.
 -->
@@ -8,7 +8,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/glass_panel"
+    android:background="@drawable/dropdown_panel"
     android:padding="6dp"
     android:elevation="12dp">
 

@@ -79,8 +79,7 @@ final class AppLibraryPanel {
         final String component;
         final String pkg;
         final String label;
-        /** It declares a TV entry point, so it is on the desk already. */
-        final boolean onDesk;
+        boolean onDesk;
 
         App(String component, String pkg, String label, boolean onDesk) {
             this.component = component;
@@ -128,7 +127,7 @@ final class AppLibraryPanel {
         list.setLayoutParams(lp);
         list.setAdapter(new Adapter());
 
-        popup = activity.glassPanel(panel, anchor, 300);
+        popup = activity.dropdownPanel(panel, anchor, 300);
         // Its right edge lines up with the button that opened it: the button is at the far end of
         // the top bar, and a panel hung off its left edge would run off the screen.
         activity.dropIn(popup, panel, anchor, Gravity.END);
@@ -228,7 +227,7 @@ final class AppLibraryPanel {
             main.post(() -> {
                 if (closed || loaded == null) return;
                 // The row may have been reused for another app while the icon was loading.
-                if (!app.component.equals(icon.getTag())) return;
+                if (!app.component.equals(holder.itemView.getTag())) return;
                 icon.setImageDrawable(loaded);
             });
         });
@@ -249,19 +248,15 @@ final class AppLibraryPanel {
             App app = apps.get(position);
             h.name.setText(app.label);
             h.item.setTag(app.component);
-            boolean added = store.isAdded(app.component);
-            h.tick.setVisibility(added || app.onDesk ? View.VISIBLE : View.INVISIBLE);
+            h.tick.setVisibility(app.onDesk ? View.VISIBLE : View.INVISIBLE);
+            h.item.setSelected(app.onDesk);
             loadIcon(app, h);
             h.item.setOnClickListener(v -> {
-                if (app.onDesk && !store.isAdded(app.component)) {
-                    // It has a TV entry point, so the desk already shows it.
-                    toast(activity.getString(R.string.app_library_already, app.label));
-                    return;
-                }
-                if (store.isAdded(app.component)) {
+                if (app.onDesk) {
                     store.remove(app.component);
-                    h.tick.setVisibility(View.INVISIBLE);
-                    toast(activity.getString(R.string.app_library_removed, app.label));
+                    activity.hideApp(app.pkg);
+                    app.onDesk = false;
+                    toast(activity.getString(R.string.app_hidden, app.label));
                 } else {
                     if (!store.add(app.component)) {
                         toast(activity.getString(R.string.app_library_full));
@@ -271,10 +266,12 @@ final class AppLibraryPanel {
                     // the apps that are not on the desk are put back, so an app hidden from the
                     // desk has to be let go of here as well.
                     new HiddenApps(activity).show(app.pkg);
-                    h.tick.setVisibility(View.VISIBLE);
+                    app.onDesk = true;
+                    changed.run();
                     toast(activity.getString(R.string.app_library_added, app.label));
                 }
-                changed.run();
+                h.tick.setVisibility(app.onDesk ? View.VISIBLE : View.INVISIBLE);
+                h.item.setSelected(app.onDesk);
             });
         }
 

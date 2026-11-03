@@ -2,6 +2,7 @@ package com.gathin.tvhome;
 
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
+import android.graphics.Outline;
 import android.graphics.PixelFormat;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
@@ -45,10 +46,19 @@ final class GlassBackground extends Drawable {
     @Override
     public void draw(Canvas canvas) {
         // Where this view sits on the screen: the glass samples the desk in screen coordinates, and
-        // a panel in a popup window is not at the origin of the one it is drawn on.
+        // a panel in a popup window is not at the origin of the one it is drawn on. Subtract any
+        // transient drop-in translation so the cached DisplayList stays aligned when it settles.
         host.getLocationOnScreen(where);
+        float originX = where[0] - host.getTranslationX();
+        float originY = where[1] - host.getTranslationY();
         Glass.draw(canvas, new RectF(getBounds()), radius, dim, edge, edgeWidth,
-                where[0], where[1], fromDesk);
+                originX, originY, fromDesk);
+    }
+
+    @Override
+    public void getOutline(Outline outline) {
+        outline.setRoundRect(getBounds(), radius);
+        outline.setAlpha(1f);
     }
 
     @Override

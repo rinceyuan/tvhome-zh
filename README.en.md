@@ -102,6 +102,13 @@ VPN / TUN connection is up, and hides it on disconnect. The underlying Wi-Fi / E
 long network names leave room for the badge, and no VPN package name or new permission is needed.
 Running a proxy app without a system VPN / TUN connection does not show the badge.
 
+**Frosted-glass dropdowns and menu interactions refined**: fixes the box-blur R/B channel swap that
+caused bright white and neon-green overflow artifacts on Android 8 and warm wallpapers, unifying all
+four top-bar dropdowns (Desktop, Favourites, Inputs, App Library) on translucent frosted glass with
+dark fallback styling. The top-bar Favourites button now uses a distinct star icon, the App Library
+toggles desk visibility directly on click, and Favourites deduplicates multi-entry packages while
+cleaning up confirmed uninstalled apps when edited.
+
 The rest — the tvOS look, the glass highlight, the clock screensaver, the `config.json` overlay, the
 debloat and restore scripts — comes from upstream under its MIT licence.
 

@@ -36,7 +36,7 @@ final class Glass {
     /** How much the wallpaper is reduced before it is blurred. */
     private static final int REDUCE = 8;
     /** How far the blur reaches, in the small picture. */
-    private static final int BLUR_RADIUS = 5;
+    private static final int BLUR_RADIUS = 8;
     /** How many times the blur runs: three box passes sit very close to a true Gaussian. */
     private static final int BLUR_PASSES = 3;
 
@@ -61,9 +61,9 @@ final class Glass {
      * panel look like a hole cut out of the wallpaper.
      */
     private static final ColorMatrix TINT = new ColorMatrix(new float[]{
-            0.48f, 0f, 0f, 0f, 14f,
-            0f, 0.48f, 0f, 0f, 14f,
-            0f, 0f, 0.48f, 0f, 14f,
+            0.40f, 0f, 0f, 0f, 12f,
+            0f, 0.40f, 0f, 0f, 12f,
+            0f, 0f, 0.40f, 0f, 12f,
             0f, 0f, 0f, 1f, 0f});
     private static final ColorMatrixColorFilter TINT_FILTER = new ColorMatrixColorFilter(TINT);
 
@@ -211,12 +211,17 @@ final class Glass {
         if (w < 3 || h < 3) return;
         int[] px = new int[w * h];
         bmp.getPixels(px, 0, w, 0, 0, w, h);
+        blurPixels(px, w, h);
+        bmp.setPixels(px, 0, w, 0, 0, w, h);
+    }
+
+    static void blurPixels(int[] px, int w, int h) {
+        if (w < 3 || h < 3) return;
         int[] tmp = new int[px.length];
         for (int pass = 0; pass < BLUR_PASSES; pass++) {
             blurRows(px, tmp, w, h);
             blurCols(tmp, px, w, h);
         }
-        bmp.setPixels(px, 0, w, 0, 0, w, h);
     }
 
     private static void blurRows(int[] src, int[] dst, int w, int h) {
@@ -235,9 +240,9 @@ final class Glass {
                 dst[row + x] = 0xFF000000 | (int) ((r / n) << 16) | (int) ((g / n) << 8) | (int) (b / n);
                 int out = src[row + clamp(x - BLUR_RADIUS, 0, w - 1)];
                 int in = src[row + clamp(x + BLUR_RADIUS + 1, 0, w - 1)];
-                r += (in & 0xFF) - (out & 0xFF);
+                r += ((in >> 16) & 0xFF) - ((out >> 16) & 0xFF);
                 g += ((in >> 8) & 0xFF) - ((out >> 8) & 0xFF);
-                b += ((in >> 16) & 0xFF) - ((out >> 16) & 0xFF);
+                b += (in & 0xFF) - (out & 0xFF);
             }
         }
     }
@@ -257,9 +262,9 @@ final class Glass {
                 dst[y * w + x] = 0xFF000000 | (int) ((r / n) << 16) | (int) ((g / n) << 8) | (int) (b / n);
                 int out = src[clamp(y - BLUR_RADIUS, 0, h - 1) * w + x];
                 int in = src[clamp(y + BLUR_RADIUS + 1, 0, h - 1) * w + x];
-                r += (in & 0xFF) - (out & 0xFF);
+                r += ((in >> 16) & 0xFF) - ((out >> 16) & 0xFF);
                 g += ((in >> 8) & 0xFF) - ((out >> 8) & 0xFF);
-                b += ((in >> 16) & 0xFF) - ((out >> 16) & 0xFF);
+                b += (in & 0xFF) - (out & 0xFF);
             }
         }
     }
